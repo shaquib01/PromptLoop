@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PromptLoop</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="popup.css">
+</head>
+
+<body>
+  <main>
+    <header>
+      <div class="brand">
+        <img src="icon48.png" alt="PromptLoop" class="logo-img">
+        <div>
+          <div class="title-row">
+            <h1>PromptLoop</h1>
+            <span class="badge">Sidebar</span>
+          </div>
+          <p>ChatGPT follow-up automation</p>
+        </div>
+      </div>
+    </header>
+
+    <div id="status" class="status">Checking ChatGPT tab…</div>
+
+    <div class="diagnostics">
+      <div class="diag-header">
+        <span class="status-pulse-dot" id="statusDot"></span>
+        <span class="diag-title">Diagnostics</span>
+      </div>
+      <div class="diag-row">
+        <span>Status</span>
+        <strong id="runStatus">Not started</strong>
+      </div>
+      <div class="diag-row">
+        <span>Rounds</span>
+        <strong id="roundsUsed">0 / 3</strong>
+      </div>
+      <div class="progress-bar-container">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+    </div>
+
+    <div class="section-label">
+      <label for="prompt">Custom follow-up prompt</label>
+    </div>
+    <div class="textarea-wrapper">
+      <textarea id="prompt" rows="4" placeholder="Example: Continue in 3 words."></textarea>
+    </div>
+
+    <div class="toggle-group">
+      <label class="toggle-row">
+        <div class="toggle-text">
+          <span class="toggle-title">Automation enabled</span>
+          <span class="toggle-desc">Auto-loop through prompts</span>
+        </div>
+        <div class="switch">
+          <input type="checkbox" id="enabled">
+          <span class="slider"></span>
+        </div>
+      </label>
+
+      <label class="toggle-row">
+        <div class="toggle-text">
+          <span class="toggle-title">Automatically press Send</span>
+          <span class="toggle-desc">Submits without manual click</span>
+        </div>
+        <div class="switch">
+          <input type="checkbox" id="autoSend" checked>
+          <span class="slider"></span>
+        </div>
+      </label>
+    </div>
+
+    <div class="two-col">
+      <div class="input-card">
+        <label for="maxRounds">Max follow-ups</label>
+        <div class="number-input-wrapper">
+          <input id="maxRounds" type="number" min="1" max="50" value="3">
+        </div>
+      </div>
+      <div class="input-card">
+        <label for="delay">Wait after response</label>
+        <div class="number-input-wrapper">
+          <input id="delay" type="number" min="1" max="15" value="3">
+          <span class="unit">sec</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="buttons">
+      <button id="start" class="btn btn-primary">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <polygon points="5 3 19 12 5 21 5 3"></polygon>
+        </svg>
+        Start
+      </button>
+      <button id="pause" class="btn btn-secondary">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <rect x="6" y="4" width="4" height="16"></rect>
+          <rect x="14" y="4" width="4" height="16"></rect>
+        </svg>
+        Pause
+      </button>
+      <button id="stop" class="btn btn-danger">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <rect x="5" y="5" width="14" height="14" rx="2"></rect>
+        </svg>
+        Stop
+      </button>
+    </div>
+
+    <button id="save" class="btn btn-outline full">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+        <polyline points="17 21 17 13 7 13 7 21"></polyline>
+        <polyline points="7 3 7 8 15 8"></polyline>
+      </svg>
+      Save settings
+    </button>
+
+    <div class="tip-card">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="16" x2="12" y2="12"></line>
+        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+      </svg>
+      <span>Runs in Chrome's native sidebar — your conversation remains fully visible!</span>
+    </div>
+  </main>
+  <script src="popup.js"></script>
+</body>
+
+</html>

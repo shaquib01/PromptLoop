@@ -1,0 +1,16 @@
+# Operating System files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# Editor directories and temporary files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Archives and build artifacts
+*.zip
+*.crx
