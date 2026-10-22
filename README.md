@@ -23,6 +23,10 @@
 
 Because it runs in Chrome's dedicated browser sidebar, your entire ChatGPT conversation stays 100% visible and unblocked.
 
+<p align="center">
+  <img src="visual_guide.png" alt="PromptLoop Visual Guide and Architecture" width="100%">
+</p>
+
 ---
 
 ## ✨ Features
