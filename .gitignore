@@ -14,3 +14,4 @@ Desktop.ini
 # Archives and build artifacts
 *.zip
 *.crx
+*.pem
