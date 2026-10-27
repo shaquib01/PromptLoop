@@ -25,24 +25,30 @@ function setStatus(message, kind = "") {
   $("status").className = `status ${kind}`;
 }
 
-function isChatGPTUrl(url) {
-  return /^https:\/\/(.*\.)?(chatgpt\.com|chat\.openai\.com)(\/|$)/.test(url || "");
+function isSupportedUrl(url) {
+  return /^https:\/\/(.*\.)?(chatgpt\.com|chat\.openai\.com|gemini\.google\.com)(\/|$)/.test(url || "");
+}
+
+function getPlatformName(url) {
+  if (/gemini\.google\.com/i.test(url || "")) return "Gemini";
+  if (/chatgpt\.com|openai\.com/i.test(url || "")) return "ChatGPT";
+  return "AI Chat";
 }
 
 async function activeChatTab() {
   try {
     let tabs = await chrome.tabs.query({ active: true, currentWindow: true });
     let tab = tabs[0];
-    if (!tab || !isChatGPTUrl(tab.url)) {
+    if (!tab || !isSupportedUrl(tab.url)) {
       const focusedTabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-      if (focusedTabs[0] && isChatGPTUrl(focusedTabs[0].url)) {
+      if (focusedTabs[0] && isSupportedUrl(focusedTabs[0].url)) {
         tab = focusedTabs[0];
       }
     }
-    if (tab && isChatGPTUrl(tab.url)) return tab;
+    if (tab && isSupportedUrl(tab.url)) return tab;
 
     const allActive = await chrome.tabs.query({ active: true });
-    const chatTab = allActive.find(t => isChatGPTUrl(t.url));
+    const chatTab = allActive.find(t => isSupportedUrl(t.url));
     if (chatTab) return chatTab;
   } catch (err) {
     console.warn("[PromptLoop] Tab query error:", err);
@@ -60,9 +66,10 @@ function normalizeForm() {
 async function sendCommand(command, settings = null) {
   const tab = await activeChatTab();
   if (!tab) {
-    setStatus("Open chatgpt.com in active tab first.", "warn");
+    setStatus("Open ChatGPT or Gemini in active tab first.", "warn");
     return false;
   }
+  const platform = getPlatformName(tab.url);
 
   // 1. Try sending the command directly
   try {
@@ -76,7 +83,7 @@ async function sendCommand(command, settings = null) {
   }
 
   // 2. Direct message failed (extension was reloaded or content script not yet injected)
-  // Auto-inject content.js dynamically into the active ChatGPT tab
+  // Auto-inject content.js dynamically into the active AI chat tab
   try {
     if (chrome.scripting) {
       await chrome.scripting.executeScript({
@@ -97,7 +104,7 @@ async function sendCommand(command, settings = null) {
   }
 
   // 3. If both direct send and programmatic injection failed
-  setStatus("Content script not ready. Reload the ChatGPT tab (F5) and try again.", "warn");
+  setStatus(`Content script not ready. Reload the ${platform} tab (F5) and try again.`, "warn");
   return false;
 }
 
@@ -132,9 +139,9 @@ async function load() {
   $("maxRounds").value = saved.maxRounds;
   $("delay").value = saved.delay;
   const tab = await activeChatTab();
-  if (!tab) setStatus("Open ChatGPT in active tab to use PromptLoop.", "warn");
+  if (!tab) setStatus("Open ChatGPT or Gemini in active tab to use PromptLoop.", "warn");
   else if (saved.runtimeStatus) setStatus(saved.runtimeStatus, saved.runtimeStatus.startsWith("Error") ? "warn" : "ok");
-  else setStatus("ChatGPT tab detected.", "ok");
+  else setStatus(`${getPlatformName(tab.url)} tab detected.`, "ok");
 }
 
 $("save").addEventListener("click", async () => {

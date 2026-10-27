@@ -4,6 +4,9 @@
   }
   window.__promptLoopLoaded = true;
 
+  const isGemini = location.hostname.includes("gemini.google.com");
+  const platformName = isGemini ? "Gemini" : "ChatGPT";
+
   const DEFAULTS = {
     prompt: "Continue.",
     enabled: false,
@@ -26,7 +29,32 @@
 
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+  function escapeHtml(str) {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
   function findComposer() {
+    if (isGemini) {
+      const rich = document.querySelector('rich-textarea');
+      if (rich) {
+        const shadowEditable = rich.shadowRoot?.querySelector('div[contenteditable="true"], [contenteditable="true"], p.content, .ql-editor');
+        if (shadowEditable) return shadowEditable;
+        const lightEditable = rich.querySelector('div[contenteditable="true"], [contenteditable="true"], p.content, .ql-editor');
+        if (lightEditable) return lightEditable;
+        return rich;
+      }
+      return document.querySelector('rich-textarea div[contenteditable="true"]')
+        || document.querySelector('rich-textarea [contenteditable="true"]')
+        || document.querySelector('.ql-editor[contenteditable="true"]')
+        || document.querySelector('div[contenteditable="true"][aria-label*="prompt" i]')
+        || document.querySelector('div[contenteditable="true"][role="textbox"]')
+        || document.querySelector('rich-textarea')
+        || document.querySelector('[contenteditable="true"]');
+    }
+
     return document.querySelector('#prompt-textarea')
       || document.querySelector('div[contenteditable="true"].ProseMirror')
       || document.querySelector('[contenteditable="true"][data-placeholder]')
@@ -39,29 +67,58 @@
     if (composer instanceof HTMLTextAreaElement || composer instanceof HTMLInputElement) {
       return composer.value.trim();
     }
-    // Check ProseMirror empty state classes
-    if (composer.classList.contains("is-empty") || composer.classList.contains("is-editor-empty")) {
+    // Check ProseMirror / rich-editor empty state classes
+    if (composer.classList && (composer.classList.contains("is-empty") || composer.classList.contains("is-editor-empty"))) {
       return "";
     }
     // Clone and strip placeholder elements so placeholder text is never mistaken for user input
-    const clone = composer.cloneNode(true);
+    let clone;
+    try {
+      clone = composer.cloneNode(true);
+    } catch (_) {
+      return (composer.innerText || composer.textContent || "").replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+    }
     clone.querySelectorAll('.placeholder, [data-placeholder], [aria-hidden="true"]').forEach(el => el.remove());
     return (clone.innerText || clone.textContent || "").replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
   }
 
   function findSendButton() {
     const selectors = [
+      'button[aria-label="Send message" i]',
+      'button[aria-label="Send prompt" i]',
+      'button[aria-label*="Send message" i]',
+      'button[aria-label*="Send prompt" i]',
+      'button[aria-label*="Send" i]',
+      'button[aria-label*="Submit" i]',
       'button[data-testid="send-button"]',
       'button[data-testid*="send" i]',
-      'button[aria-label*="Send" i]',
+      'button[data-test-id*="send" i]',
+      'button.send-button',
       'button[title*="Send" i]'
     ];
     const candidates = selectors.flatMap(selector => Array.from(document.querySelectorAll(selector)));
+
+    // Check rich-textarea shadowRoot if present
+    const rich = document.querySelector('rich-textarea');
+    if (rich && rich.shadowRoot) {
+      for (const sel of selectors) {
+        const btn = rich.shadowRoot.querySelector(sel);
+        if (btn) candidates.push(btn);
+      }
+    }
+
     for (const button of [...new Set(candidates)]) {
       if (!button.disabled && button.getAttribute("aria-disabled") !== "true") return button;
     }
+
     const composer = findComposer();
-    const scope = composer?.closest('form') || composer?.parentElement?.parentElement?.parentElement;
+    const scope = composer?.closest('form')
+      || composer?.parentElement?.parentElement?.parentElement
+      || document.querySelector('.input-area')
+      || document.querySelector('.text-input-field')
+      || document.querySelector('input-area')
+      || rich?.parentElement;
+
     if (scope) {
       for (const button of scope.querySelectorAll('button')) {
         const label = `${button.getAttribute("aria-label") || ""} ${button.getAttribute("title") || ""} ${button.getAttribute("data-testid") || ""}`;
@@ -82,7 +139,7 @@
   }
 
   async function submitComposer(composer) {
-    // Wait briefly for React / ProseMirror to enable the send button after text insertion
+    // Wait briefly for framework to enable the send button after text insertion
     const button = await waitForSendButton(1500);
     if (button) {
       button.click();
@@ -115,21 +172,26 @@
     }));
     await sleep(600);
     if (isGenerating() || !getComposerText(composer)) return "keyboard";
-    throw new Error("Prompt was inserted, but ChatGPT did not accept Send. Check the page and try again.");
+    throw new Error(`Prompt was inserted, but ${platformName} did not accept Send. Check the page and try again.`);
   }
 
   function isGenerating() {
-    // 1. Specific Stop button selectors
+    // 1. Specific Stop button selectors (covers both ChatGPT and Gemini)
     const selectors = [
+      'button[aria-label="Stop response" i]',
+      'button[aria-label*="Stop response" i]',
+      'button[aria-label="Stop generating" i]',
+      'button[aria-label*="Stop generating" i]',
+      'button[aria-label*="Stop streaming" i]',
+      'button[aria-label*="Stop output" i]',
+      'button[aria-label="Stop" i]',
       'button[data-testid="stop-button"]',
       'button[data-testid="stop-generating-button"]',
       'button[data-testid="fruitjuice-stop-button"]',
       'button[data-testid*="stop" i]',
-      'button[aria-label="Stop generating" i]',
-      'button[aria-label="Stop streaming" i]',
-      'button[aria-label="Stop output" i]',
-      'button[aria-label="Stop" i]',
+      'button.stop-button',
       'button[title="Stop generating" i]',
+      'button[title="Stop response" i]',
       'button[title="Stop streaming" i]',
       'button[title="Stop" i]'
     ];
@@ -138,19 +200,31 @@
       if (button && !button.disabled && button.getAttribute("aria-disabled") !== "true") return true;
     }
 
-    // 2. Active streaming classes
-    if (document.querySelector('.result-streaming, [class*="result-streaming"]')) {
+    // Check rich-textarea shadowRoot if present
+    const rich = document.querySelector('rich-textarea');
+    if (rich && rich.shadowRoot) {
+      for (const selector of selectors) {
+        const btn = rich.shadowRoot.querySelector(selector);
+        if (btn && !btn.disabled && btn.getAttribute("aria-disabled") !== "true") return true;
+      }
+    }
+
+    // 2. Active streaming classes or loading indicators
+    if (document.querySelector('.result-streaming, [class*="result-streaming"], .sparkle-loading, mat-progress-bar[mode="indeterminate"]')) {
       return true;
     }
 
-    // 3. Buttons inside the composer explicitly labeled Stop
+    // 3. Buttons inside or near the composer explicitly labeled Stop
     const composer = findComposer();
-    const scope = composer?.closest('form') || composer?.parentElement?.parentElement?.parentElement;
+    const scope = composer?.closest('form')
+      || composer?.parentElement?.parentElement?.parentElement
+      || document.querySelector('.input-area')
+      || rich?.parentElement;
     if (scope) {
       for (const btn of scope.querySelectorAll('button')) {
         if (btn.disabled || btn.getAttribute("aria-disabled") === "true") continue;
         const label = `${btn.getAttribute("aria-label") || ""} ${btn.getAttribute("title") || ""} ${btn.innerText || ""}`.trim();
-        if (/^stop(\s+(generating|streaming|output))?$/i.test(label)) return true;
+        if (/^stop(\s+(response|generating|streaming|output))?$/i.test(label)) return true;
       }
     }
 
@@ -158,17 +232,21 @@
   }
 
   function getAssistantMessages() {
-    // Priority 1: Markdown containers in the conversation (standard ChatGPT assistant output)
+    // Priority 1 (Gemini): model-response elements
+    const modelResponses = Array.from(document.querySelectorAll('model-response, [data-test-id*="model-response"]'));
+    if (modelResponses.length > 0) return modelResponses;
+
+    // Priority 2 (ChatGPT): Markdown containers in the conversation
     const markdowns = Array.from(document.querySelectorAll('.markdown, [class*="markdown"], .prose, [class*="prose"]')).filter(el => {
-      return !el.closest('#prompt-textarea') && !el.closest('form');
+      return !el.closest('#prompt-textarea') && !el.closest('form') && !el.closest('rich-textarea');
     });
     if (markdowns.length > 0) return markdowns;
 
-    // Priority 2: Message elements by role or turn attribute
+    // Priority 3: Message elements by role or turn attribute
     const roleNodes = Array.from(document.querySelectorAll('[data-message-author-role="assistant"], [data-turn="assistant"]'));
     if (roleNodes.length > 0) return roleNodes;
 
-    // Priority 3: Conversation turns
+    // Priority 4: Conversation turns (ChatGPT)
     const turns = Array.from(document.querySelectorAll('[data-testid^="conversation-turn-"]'));
     if (turns.length > 0) {
       const assistantTurns = turns.filter(turn => {
@@ -181,10 +259,10 @@
       if (assistantTurns.length > 0) return assistantTurns;
     }
 
-    // Priority 4: Assistant turns identified by Copy buttons
+    // Priority 5: Assistant turns identified by Copy buttons
     const copyBtns = Array.from(document.querySelectorAll('button[aria-label*="Copy" i]'));
     if (copyBtns.length > 0) {
-      const parents = copyBtns.map(b => b.closest('[data-testid^="conversation-turn-"]') || b.closest('article') || b.parentElement?.parentElement).filter(Boolean);
+      const parents = copyBtns.map(b => b.closest('model-response') || b.closest('[data-testid^="conversation-turn-"]') || b.closest('article') || b.parentElement?.parentElement).filter(Boolean);
       if (parents.length > 0) return [...new Set(parents)];
     }
 
@@ -195,9 +273,10 @@
     const messages = getAssistantMessages();
     if (!messages.length) return "";
     const latest = messages[messages.length - 1];
-    const target = latest.querySelector?.('.markdown, [class*="markdown"], .prose, [class*="prose"]') || latest;
+    const target = latest.querySelector?.('.markdown, [class*="markdown"], .prose, [class*="prose"], .model-response-text, message-content') || latest;
     const clone = target.cloneNode(true);
-    clone.querySelectorAll('button, svg, [role="button"]').forEach(el => el.remove());
+    // Strip buttons, SVGs, role=button, and internal thinking blocks (Gemini model-thoughts)
+    clone.querySelectorAll('button, svg, [role="button"], model-thoughts, .model-thoughts').forEach(el => el.remove());
     return (clone.innerText || clone.textContent || "").trim();
   }
 
@@ -215,7 +294,7 @@
 
   async function insertPrompt(text) {
     const composer = findComposer();
-    if (!composer) throw new Error("ChatGPT message input was not found. Reload the tab and try again.");
+    if (!composer) throw new Error(`${platformName} message input was not found. Reload the tab and try again.`);
 
     composer.focus();
     if (composer instanceof HTMLTextAreaElement || composer instanceof HTMLInputElement) {
@@ -229,15 +308,19 @@
       composer.dispatchEvent(new Event("change", { bubbles: true }));
     } else {
       composer.focus();
-      const targetP = composer.querySelector('p') || composer;
-      const selection = window.getSelection();
-      const range = document.createRange();
-      range.selectNodeContents(targetP);
-      selection.removeAllRanges();
-      selection.addRange(range);
+      const targetP = composer.querySelector('p') || (composer.tagName.toLowerCase() === 'p' ? composer : null);
 
       let inserted = false;
       try {
+        const selection = window.getSelection();
+        const range = document.createRange();
+        if (targetP) {
+          range.selectNodeContents(targetP);
+        } else {
+          range.selectNodeContents(composer);
+        }
+        selection.removeAllRanges();
+        selection.addRange(range);
         inserted = document.execCommand("insertText", false, text);
       } catch (_) {}
 
@@ -254,27 +337,35 @@
         } catch (_) {}
       }
 
-      // If still not matching, update the paragraph node and dispatch beforeinput/input
+      // If still not matching, update paragraph/innerHTML directly and dispatch events
       if (getComposerText(composer) !== text.trim()) {
-        if (composer.querySelector('p')) {
+        if (targetP) {
+          targetP.textContent = text;
+        } else if (composer.querySelector('p')) {
           composer.querySelector('p').textContent = text;
         } else {
-          composer.innerHTML = `<p>${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`;
+          composer.innerHTML = `<p>${escapeHtml(text)}</p>`;
         }
         composer.dispatchEvent(new InputEvent("beforeinput", {
           bubbles: true, cancelable: true, inputType: "insertText", data: text
         }));
         composer.dispatchEvent(new InputEvent("input", {
-          bubbles: true, inputType: "insertText", data: text
+          bubbles: true, cancelable: true, inputType: "insertText", data: text
         }));
+        composer.dispatchEvent(new Event("change", { bubbles: true }));
+      } else {
+        composer.dispatchEvent(new InputEvent("input", {
+          bubbles: true, cancelable: true, inputType: "insertText", data: text
+        }));
+        composer.dispatchEvent(new Event("change", { bubbles: true }));
       }
     }
 
-    // Give React / ProseMirror time to reconcile and update internal state
+    // Give framework time to reconcile and update internal state
     await sleep(350);
     const actual = getComposerText(composer);
     if (actual !== text.trim()) {
-      throw new Error("Could not verify the inserted prompt. Nothing was auto-sent.");
+      throw new Error(`Could not verify the inserted prompt on ${platformName}. Nothing was auto-sent.`);
     }
   }
 
@@ -306,7 +397,7 @@
         stableSince = 0;
         lastText = text;
         lastCount = messages.length;
-        setStatus(`ChatGPT is responding (${settings.roundsUsed}/${settings.maxRounds})…`);
+        setStatus(`${platformName} is responding (${settings.roundsUsed}/${settings.maxRounds})…`);
         continue;
       }
 
@@ -356,7 +447,7 @@
     }
 
     if (monitorId === responseMonitorId && thisOperation === operationId && settings.enabled && !paused) {
-      setStatus('Timed out waiting for a response to finish. Check ChatGPT, then press Start to retry.');
+      setStatus(`Timed out waiting for a response to finish. Check ${platformName}, then press Start to retry.`);
     }
   }
 
@@ -370,7 +461,7 @@
       return;
     }
 
-    // Never overwrite an existing draft or send while ChatGPT is still generating.
+    // Never overwrite an existing draft or send while still generating.
     const composer = findComposer();
     const draft = getComposerText(composer);
     if (draft) {
@@ -378,7 +469,7 @@
       return;
     }
     if (isGenerating()) {
-      setStatus("ChatGPT is still generating. Waiting for it to finish…");
+      setStatus(`${platformName} is still generating. Waiting for it to finish…`);
       return;
     }
 
@@ -483,7 +574,7 @@
 
   const messageListener = (message, _sender, sendResponse) => {
     if (message?.type === "PING") {
-      sendResponse({ ok: true, version: "1.4.6" });
+      sendResponse({ ok: true, version: "1.5.0" });
       return false;
     }
     if (message?.type !== "PROMPTLOOP_COMMAND") return false;
@@ -506,8 +597,8 @@
         await chrome.storage.local.set({ ...settings, enabled: true, roundsUsed: 0 });
 
         if (generating) {
-          setStatus("ChatGPT is responding. Waiting for that response to finish before sending the follow-up.");
-          sendResponse({ ok: true, message: "ChatGPT is responding. Waiting for it to finish; the follow-up will then be sent." });
+          setStatus(`${platformName} is responding. Waiting for that response to finish before sending the follow-up.`);
+          sendResponse({ ok: true, message: `${platformName} is responding. Waiting for it to finish; the follow-up will then be sent.` });
           const baseline = getLatestAssistantText();
           const baselineMessages = getAssistantMessages().length;
           void monitorNextResponse(operationId, baseline, baselineMessages, true);

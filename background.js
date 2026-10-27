@@ -8,7 +8,9 @@ async function injectIntoExistingTabs() {
         "https://chatgpt.com/*",
         "https://*.chatgpt.com/*",
         "https://chat.openai.com/*",
-        "https://*.openai.com/*"
+        "https://*.openai.com/*",
+        "https://gemini.google.com/*",
+        "https://*.gemini.google.com/*"
       ]
     });
     for (const tab of tabs) {
